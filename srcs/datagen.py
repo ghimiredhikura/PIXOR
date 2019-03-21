@@ -10,9 +10,7 @@ from utils import plot_bev, get_points_in_a_rotated_box, plot_label_map, trasfor
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 
-#KITTI_PATH = '/home/autoronto/Kitti/object'
-KITTI_PATH = '/mnt/ssd2/od/KITTI'
-#KITTI_PATH = 'KITTI'
+KITTI_PATH = 'F:/3D-Object-Detection/dataset/KITTI/object'
 
 class KITTI(Dataset):
 
@@ -30,12 +28,11 @@ class KITTI(Dataset):
     target_mean = np.array([0.008, 0.001, 0.202, 0.2, 0.43, 1.368])
     target_std_dev = np.array([0.866, 0.5, 0.954, 0.668, 0.09, 0.111])
 
-
     def __init__(self, frame_range = 10000, use_npy=False, train=True):
         self.frame_range = frame_range
         self.velo = []
         self.use_npy = use_npy
-        self.LidarLib = ctypes.cdll.LoadLibrary('preprocess/LidarPreprocess.so')
+        #self.LidarLib = ctypes.cdll.LoadLibrary('preprocess/LidarPreprocess.so')
         self.image_sets = self.load_imageset(train) # names
 
     def __len__(self):
@@ -43,6 +40,7 @@ class KITTI(Dataset):
 
     def __getitem__(self, item):
         scan = self.load_velo_scan(item)
+        scan = self.lidar_preprocess(scan)
         scan = torch.from_numpy(scan)
         label_map, _ = self.get_label(item)
         self.reg_target_transform(label_map)
@@ -62,7 +60,6 @@ class KITTI(Dataset):
 
         index = np.nonzero(cls_map)
         reg_map[index] = (reg_map[index] - self.target_mean)/self.target_std_dev
-
 
     def load_imageset(self, train):
         path = KITTI_PATH
@@ -102,6 +99,7 @@ class KITTI(Dataset):
 
         w, h, l, y, z, x, yaw = bbox[8:15]
         y = -y
+
         # manually take a negative s. t. it's a right-hand system, with
         # x facing in the front windshield of the car
         # z facing up
@@ -201,11 +199,11 @@ class KITTI(Dataset):
         if self.use_npy:
             scan = np.load(filename[:-4]+'.npy')
         else:
-            c_name = bytes(filename, 'utf-8')
-            scan = np.zeros(self.geometry['input_shape'], dtype=np.float32)
-            c_data = ctypes.c_void_p(scan.ctypes.data)
-            self.LidarLib.createTopViewMaps(c_data, c_name)
-            #scan = np.fromfile(filename, dtype=np.float32).reshape(-1, 4)
+            #c_name = bytes(filename, 'utf-8')
+            #scan = np.zeros(self.geometry['input_shape'], dtype=np.float32)
+            #c_data = ctypes.c_void_p(scan.ctypes.data)
+            #self.LidarLib.createTopViewMaps(c_data, c_name)
+            scan = np.fromfile(filename, dtype=np.float32).reshape(-1, 4)
             
         return scan
 

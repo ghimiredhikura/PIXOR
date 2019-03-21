@@ -227,7 +227,7 @@ def load_config(exp_name):
          target_classes: A list of strings denoting the classes to
                         build the classifer for
      """
-    path = os.path.join('experiments', exp_name, 'config.json')
+    path = os.path.join('srcs/experiments', exp_name, 'config.json')
     with open(path) as file:
         config = json.load(file)
 
