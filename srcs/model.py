@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 from utils import maskFOV_on_BEV
+from torchsummary import summary
 
 
 def conv3x3(in_planes, out_planes, stride=1, bias=False):
@@ -72,6 +73,7 @@ class Bottleneck(nn.Module):
         if self.use_bn:
             out = self.bn2(out)
         out = self.relu(out)
+
         out = self.conv3(out)
         if self.use_bn:
             out = self.bn3(out)
@@ -272,7 +274,6 @@ class Decoder(nn.Module):
 
         decoded_reg = torch.cat([rear_left_x, rear_left_y, rear_right_x, rear_right_y,
                                  front_right_x, front_right_y, front_left_x, front_left_y], dim=1)
-
         return decoded_reg
 
 class PIXOR(nn.Module):
@@ -345,8 +346,9 @@ def test_decoder(decode = True):
     }
     print("Testing PIXOR decoder")
     net = PIXOR(geom, use_bn=False)
+    summary(net, (36, 800, 700))
     net.set_decode(decode)
-    preds = net(torch.autograd.Variable(torch.randn(2, 800, 700, 36)))
+    preds = net(torch.autograd.Variable(torch.randn(2, 36, 800, 700)))
 
     print("Predictions output size", preds.size())
 
