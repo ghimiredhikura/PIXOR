@@ -338,6 +338,6 @@ def test():
 
 
 if __name__=="__main__":
-    test()
+    test0()
     #preprocess_to_npy(True)
     #preprocess_to_npy(False)

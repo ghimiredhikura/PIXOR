@@ -256,7 +256,7 @@ def get_model_name(config, epoch=None):
     if epoch is None:
         epoch = config['resume_from']
 
-    folder = os.path.join("experiments", name)
+    folder = os.path.join("srcs/experiments", name)
     if not os.path.exists(folder):
         os.makedirs(folder)
 

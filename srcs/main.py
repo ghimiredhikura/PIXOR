@@ -12,6 +12,8 @@ from model import PIXOR
 from utils import get_model_name, load_config, get_logger, plot_bev, plot_label_map, plot_pr_curve, get_bev
 from postprocess import filter_pred, compute_matches, compute_ap
 
+import logging
+import datetime
 
 def build_model(config, device, train=True):
     net = PIXOR(config['geometry'], config['use_bn'])
@@ -176,8 +178,8 @@ def eval_dataset(config, net, loss_fn, loader, device, e_range='all'):
 
     return metrics, precisions, recalls, log_images
 
-
-def train(exp_name, device):
+def train(args, device):
+    exp_name = args.name
     # Load Hyperparameters
     config, learning_rate, batch_size, max_epochs = load_config(exp_name)
 
@@ -204,6 +206,8 @@ def train(exp_name, device):
         # writefile(config, 'val_loss.csv', 'epoch, cls_loss, loc_loss\n')
         st_epoch = 0
 
+    do_logging = args.do_logging
+
     step = 1 + st_epoch * len(train_data_loader)
     cls_loss = 0
     loc_loss = 0
@@ -219,8 +223,12 @@ def train(exp_name, device):
             net.set_decode(False)
         scheduler.step()
 
-        for input, label_map, image_id in train_data_loader:
+        for batch_idx, (input, label_map, image_id) in enumerate(train_data_loader):
             
+            # Log epoch and batch index
+            if do_logging:
+                logging.info('Running epoch index = %d, batch index = %d' % (epoch, batch_idx))
+
             tic = time.time()#print('step', step)
             input = input.to(device)
             label_map = label_map.to(device)
@@ -240,6 +248,11 @@ def train(exp_name, device):
                 loc_loss = loc_loss / config['log_every']
                 train_logger.scalar_summary('cls_loss', cls_loss, step)
                 train_logger.scalar_summary('loc_loss', loc_loss, step)
+
+                # Log mean batch loss per epoch
+                if do_logging:
+                    logging.info("Cls Loss = %lf, Loc Loss: %lf" % (cls_loss, loc_loss))
+
                 cls_loss = 0
                 loc_loss = 0
 
@@ -249,12 +262,11 @@ def train(exp_name, device):
                 #    train_logger.histo_summary(tag + '/grad', value.grad.data.cpu().numpy(), step)
 
             step += 1
-            #print(time.time() - tic)            
 
         # Record Training Loss
         train_loss = train_loss / len(train_data_loader)
         train_logger.scalar_summary('loss', train_loss, epoch + 1)
-        print("Epoch {}|Time {:.3f}|Training Loss: {:.5f}".format(
+        logging.info("Epoch {}|Time {:.3f}|Training Loss: {:.5f}".format(
             epoch + 1, time.time() - start_time, train_loss))
 
         # Run Validation
@@ -264,7 +276,7 @@ def train(exp_name, device):
             for tag, value in val_metrics.items():
                 val_logger.scalar_summary(tag, value, epoch + 1)
             val_logger.image_summary('Predictions', log_images, epoch + 1)
-            print("Epoch {}|Time {:.3f}|Validation Loss: {:.5f}".format(
+            logging.info("Epoch {}|Time {:.3f}|Validation Loss: {:.5f}".format(
                 epoch + 1, time.time() - tic, val_metrics['loss']))
 
         # Save Checkpoint
@@ -274,9 +286,9 @@ def train(exp_name, device):
                 torch.save(net.module.state_dict(), model_path)
             else:
                 torch.save(net.state_dict(), model_path)
-            print("Checkpoint saved at {}".format(model_path))
+            logging.info("Checkpoint saved at {}".format(model_path))
 
-    print('Finished Training')
+    logging.info('Finished Training')
 
 
 def eval_one(net, loss_fn, config, loader, image_id, device, plot=False, verbose=False):
@@ -297,7 +309,6 @@ def eval_one(net, loss_fn, config, loader, image_id, device, plot=False, verbose
 
     if verbose:
         print("Forward pass time", t_forward)
-
 
     # Filter Predictions
     t_start = time.time()
@@ -378,21 +389,38 @@ def test(exp_name, device, image_id):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='PIXOR custom implementation')
+    parser.add_argument('--do_logging', type=bool, default=True, help='Whether or not do logging.')
+    parser.add_argument('--logging_file', type=str, default='', help='Overriding logging file name.')
     parser.add_argument('mode', choices=['train', 'val', 'test'], help='name of the experiment')
     parser.add_argument('--name', required=True, help="name of the experiment")
-    parser.add_argument('--device', default='cpu', help='device to train on')
+    parser.add_argument('--device', default='cuda:0', help='device to train on')
     parser.add_argument('--eval_range', type=int, help="range of evaluation")
     parser.add_argument('--test_id', type=int, default=25, help="id of the image to test")
     args = parser.parse_args()
 
+    # Assign default name for training log if input is empty
+    do_logging = args.do_logging
+    logging_file = args.logging_file
+
+    if do_logging and logging_file=='':
+        date_str = str(datetime.date.today())
+        logging_file = 'training_log_'+date_str+'.log'
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s %(message)s',
+            handlers=[
+                logging.FileHandler(logging_file),
+                logging.StreamHandler()
+            ])
 
     device = torch.device(args.device)
+
     if not torch.cuda.is_available():
         device = torch.device('cpu')
-    print("Using device", device)
+    print("Using Device", device)
 
     if args.mode=='train':
-        train(args.name, device)
+        train(args, device)
     if args.mode=='val':
         if args.eval_range is None:
             args.eval_range='all'
